@@ -26,6 +26,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
         private TotpKeyring $keyring,
         private string $table = 'auth_totp_credentials',
         private int $window = 1,
+        private int $enrollmentTtlSeconds = 600,
     ) {
         if (preg_match('/\A[A-Za-z_][A-Za-z0-9_]*\z/D', $this->table) !== 1) {
             throw new \InvalidArgumentException(
@@ -36,6 +37,15 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
         if ($this->window < 0 || $this->window > 2) {
             throw new \InvalidArgumentException(
                 'TOTP verification window must be between 0 and 2 steps.',
+            );
+        }
+
+        if (
+            $this->enrollmentTtlSeconds < 60
+            || $this->enrollmentTtlSeconds > 3600
+        ) {
+            throw new \InvalidArgumentException(
+                'TOTP enrollment TTL must be between 60 and 3600 seconds.',
             );
         }
     }
@@ -116,6 +126,25 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             }
 
             $subject = $subjectId->toString();
+            $pendingCiphertext = self::stringValue(
+                $row,
+                'pending_ciphertext',
+            );
+            $pendingCreatedAt = $this->date(
+                self::stringValue($row, 'pending_created_at'),
+            );
+            $now = $this->now();
+
+            if (
+                $pendingCreatedAt->modify(
+                    sprintf('+%d seconds', $this->enrollmentTtlSeconds),
+                ) <= $now
+            ) {
+                $this->clearPending($subject, $pendingCiphertext);
+
+                return false;
+            }
+
             $digits = self::intValue($row, 'pending_digits');
             $period = self::intValue($row, 'pending_period');
             $digest = self::stringValue($row, 'pending_digest');
@@ -148,11 +177,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 return false;
             }
 
-            $pendingCiphertext = self::stringValue(
-                $row,
-                'pending_ciphertext',
-            );
-            $now = $this->format($this->now());
+            $formattedNow = $this->format($now);
             $affected = $this->database->update($this->table)
                 ->where('subject_uuid', $subject)
                 ->where('pending_ciphertext', $pendingCiphertext)
@@ -169,7 +194,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                     'active_digits' => $digits,
                     'active_period' => $period,
                     'active_digest' => $digest,
-                    'enabled_at' => $now,
+                    'enabled_at' => $formattedNow,
                     'last_used_step' => $step,
                     'pending_key_id' => null,
                     'pending_nonce' => null,
@@ -298,6 +323,26 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
     {
         $this->database->delete($this->table)
             ->where('subject_uuid', $subjectId->toString())
+            ->run();
+    }
+
+    private function clearPending(
+        string $subjectId,
+        #[\SensitiveParameter]
+        string $pendingCiphertext,
+    ): void {
+        $this->database->update($this->table)
+            ->where('subject_uuid', $subjectId)
+            ->where('pending_ciphertext', $pendingCiphertext)
+            ->values([
+                'pending_key_id' => null,
+                'pending_nonce' => null,
+                'pending_ciphertext' => null,
+                'pending_digits' => null,
+                'pending_period' => null,
+                'pending_digest' => null,
+                'pending_created_at' => null,
+            ])
             ->run();
     }
 

@@ -11,5 +11,6 @@ Security properties:
 - database rows contain authenticated ciphertext + nonce + key id;
 - accepted time steps are persisted and cannot be replayed;
 - enrollment must be confirmed with a valid code before the credential becomes active;
+- pending enrollment secrets expire after a bounded server-side TTL (10 minutes by default);
 - TOTP evidence adds a possession factor but never claims phishing resistance;
 - successful reauthentication rotates the active `SessionCredential`.
