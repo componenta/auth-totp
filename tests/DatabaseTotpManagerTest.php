@@ -51,6 +51,60 @@ final class DatabaseTotpManagerTest extends TestCase
         self::assertNotNull($manager->find($subject));
     }
 
+    public function testPendingEnrollmentExpiresWithoutDisablingActiveCredential(): void
+    {
+        self::requireSqlite();
+        $database = SqliteDatabaseFixture::create();
+        $clock = new FrozenClock('2030-01-01T00:00:00+00:00', 'UTC');
+        $manager = self::manager($database, $clock);
+        $subject = Uuid::fromString(
+            '018f6d5d-3f7a-7a9b-8c2f-123456789abc',
+        );
+        $activeEnrollment = $manager->beginEnrollment(
+            $subject,
+            'user@example.com',
+            'Componenta',
+        );
+        $activeOtp = TOTP::createFromSecret(
+            $activeEnrollment->secret,
+            $clock,
+        )
+            ->withDigits(6)
+            ->withPeriod(30)
+            ->withDigest('sha1');
+
+        self::assertTrue(
+            $manager->confirmEnrollment($subject, $activeOtp->now()),
+        );
+        self::assertNotNull($manager->find($subject));
+
+        $pending = $manager->beginEnrollment(
+            $subject,
+            'user@example.com',
+            'Componenta',
+        );
+        $pendingOtp = TOTP::createFromSecret($pending->secret, $clock)
+            ->withDigits(6)
+            ->withPeriod(30)
+            ->withDigest('sha1');
+
+        $clock->advance('+11 minutes');
+
+        self::assertFalse(
+            $manager->confirmEnrollment($subject, $pendingOtp->now()),
+        );
+        self::assertNotNull($manager->find($subject));
+
+        $row = $database->select('pending_ciphertext')
+            ->from('auth_totp_credentials')
+            ->where('subject_uuid', $subject->toString())
+            ->run()
+            ->fetch();
+
+        self::assertIsArray($row);
+        self::assertNull($row['pending_ciphertext'] ?? null);
+    }
+
     public function testAcceptedTimeStepCannotBeReplayed(): void
     {
         self::requireSqlite();
