@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Componenta\Auth\Totp;
 
 use Componenta\Auth\Session\AuthSession;
-use Componenta\Auth\Session\AuthSessionManagerInterface;
+use Componenta\Auth\Session\AuthenticatedSessionIssuer;
 use Componenta\Auth\Session\Http\AuthSessionGrantPublisher;
-use Componenta\Auth\Session\RotationReason;
 use Componenta\Identity\IdentityInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -19,7 +18,7 @@ final readonly class TotpReauthenticationHandler implements
 {
     public function __construct(
         private TotpManagerInterface $totp,
-        private AuthSessionManagerInterface $sessions,
+        private AuthenticatedSessionIssuer $sessionIssuer,
         private AuthSessionGrantPublisher $publisher,
         private ResponseFactoryInterface $responses,
     ) {}
@@ -50,10 +49,10 @@ final readonly class TotpReauthenticationHandler implements
             return $this->denied();
         }
 
-        $grant = $this->sessions->rotate(
+        $grant = $this->sessionIssuer->reauthenticate(
             $session,
+            $identity,
             TotpEvidence::create(),
-            RotationReason::Reauthentication,
         );
 
         return $this->publisher->publish(
