@@ -10,18 +10,11 @@ final class TotpEvidence
 {
     private function __construct() {}
 
-    public static function augment(
-        AuthenticationEvidence $evidence,
-    ): AuthenticationEvidence {
+    public static function create(): AuthenticationEvidence
+    {
         return new AuthenticationEvidence(
-            methods: array_values(array_unique([
-                ...$evidence->methods,
-                'totp',
-            ])),
-            capabilities: array_values(array_unique([
-                ...$evidence->capabilities,
-                'possession',
-            ])),
+            methods: ['totp'],
+            capabilities: ['possession'],
         );
     }
 }

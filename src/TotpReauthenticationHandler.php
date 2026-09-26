@@ -52,7 +52,7 @@ final readonly class TotpReauthenticationHandler implements
 
         $grant = $this->sessions->rotate(
             $session,
-            TotpEvidence::augment($session->evidence),
+            TotpEvidence::create(),
             RotationReason::Reauthentication,
         );
 
