@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Componenta\Auth\Totp;
 
+use Componenta\Auth\DeniedReasonInterface;
 use Componenta\Auth\Session\AuthSession;
 use Componenta\Auth\Session\AuthenticatedSessionIssuer;
 use Componenta\Auth\Session\Http\AuthSessionGrantPublisher;
@@ -54,6 +55,10 @@ final readonly class TotpReauthenticationHandler implements
             $identity,
             TotpEvidence::create(),
         );
+
+        if ($grant instanceof DeniedReasonInterface) {
+            return $this->denied();
+        }
 
         return $this->publisher->publish(
             $request,

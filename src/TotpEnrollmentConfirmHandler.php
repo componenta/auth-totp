@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Componenta\Auth\Totp;
 
+use Componenta\Auth\Session\Http\FactorManagementGuard;
 use Componenta\Identity\IdentityInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -15,6 +16,7 @@ final readonly class TotpEnrollmentConfirmHandler implements RequestHandlerInter
     public function __construct(
         private TotpManagerInterface $totp,
         private ResponseFactoryInterface $responses,
+        private FactorManagementGuard $guard,
     ) {}
 
     #[\Override]
@@ -22,6 +24,10 @@ final readonly class TotpEnrollmentConfirmHandler implements RequestHandlerInter
         #[\SensitiveParameter]
         ServerRequestInterface $request,
     ): ResponseInterface {
+        if (($denial = $this->guard->check($request)) !== null) {
+            return $denial;
+        }
+
         $identity = $request->getAttribute(IdentityInterface::class);
         $body = $request->getParsedBody();
         $code = is_array($body) ? ($body['code'] ?? null) : null;
