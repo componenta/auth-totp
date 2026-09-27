@@ -61,7 +61,7 @@ final class EnrollmentAuthorizationTest extends TestCase
         };
         $clock = new FrozenClock('2030-01-01T00:00:00+00:00', 'UTC');
         $at = $clock->now()->modify($case === 'stale' ? '-600 seconds' : '-60 seconds');
-        $session = new AuthSession($uuids->generate(), $identity->uuid, new AuthenticationEvidence(['password']), 1, $at, $at, null, $at, $at->modify('+1 hour'), $at->modify('+8 hours'));
+        $session = new AuthSession($uuids->generate(), $identity->uuid, new AuthenticationEvidence(['password']), 1, $at, null, $at, $at->modify('+1 hour'), $at->modify('+8 hours'));
         $registry = $this->createStub(AuthSessionRegistryInterface::class);
         $registry->method('find')->willReturn($session);
         $provider = $this->createStub(IdentityProviderInterface::class);
