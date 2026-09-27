@@ -16,6 +16,7 @@ final readonly class TotpKeyring
      */
     public function __construct(
         public string $currentKeyId,
+        #[\SensitiveParameter]
         array $keys,
     ) {
         if (!array_key_exists($this->currentKeyId, $keys)) {
@@ -36,6 +37,12 @@ final readonly class TotpKeyring
         }
 
         $this->keys = $keys;
+    }
+
+    /** @return array{currentKeyId: string, keys: string} */
+    public function __debugInfo(): array
+    {
+        return ['currentKeyId' => $this->currentKeyId, 'keys' => '[REDACTED]'];
     }
 
     /**
