@@ -273,7 +273,11 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
 
             $update = $this->database->update($this->table)
                 ->where('subject_uuid', $subject)
-                ->where('enabled_at', '!=', null);
+                ->where('enabled_at', '!=', null)
+                // A replacement factor may reuse the same time-step counter.
+                ->where('active_ciphertext', self::stringValue($row, 'active_ciphertext'))
+                ->where('active_key_id', self::stringValue($row, 'active_key_id'))
+                ->where('active_nonce', self::stringValue($row, 'active_nonce'));
 
             if ($lastUsedStep === null) {
                 $update->where('last_used_step', null);
@@ -391,7 +395,10 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
     /** @return array<array-key, mixed>|null */
     private function row(UuidInterface $subjectId): ?array
     {
-        $row = $this->database->select()
+        $row = $this->database->select()->withDriver(
+            $this->database->getDriver(DatabaseInterface::WRITE),
+            $this->database->getPrefix(),
+        )
             ->from($this->table)
             ->where('subject_uuid', $subjectId->toString())
             ->run()
