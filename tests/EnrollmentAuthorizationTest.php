@@ -48,6 +48,7 @@ final class EnrollmentAuthorizationTest extends TestCase
         foreach ([true, false] as $start) {
             yield [$start, 'get', 405];
             yield [$start, 'no-csrf', 403];
+            yield [$start, 'missing-origin', 403];
             yield [$start, 'stale', 403];
             yield [$start, 'allowed', $start ? 200 : 204];
         }
@@ -74,6 +75,9 @@ final class EnrollmentAuthorizationTest extends TestCase
         $request = (new ServerRequest($case === 'get' ? 'GET' : 'POST', 'https://example.test/factors'))
             ->withAttribute(IdentityInterface::class, $identity)
             ->withAttribute(AuthSession::class, $session);
+        if ($case !== 'missing-origin') {
+            $request = $request->withHeader('Origin', 'https://example.test');
+        }
         if ($case !== 'no-csrf') {
             $request = $request->withHeader('X-CSRF-Token', (new AuthSessionCsrfTokenManager($session, $key))->generate());
         }
