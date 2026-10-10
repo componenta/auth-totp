@@ -8,7 +8,7 @@
         "ext-sodium": "*",
         "componenta/auth": "^3.0",
         "componenta/auth-session": "^1.0",
-        "componenta/auth-session-http": "^1.0",
+        "componenta/auth-session-http": "^2.0.1",
         "componenta/identity": "^1.0.1",
         "cycle/database": "^2.22",
         "psr/clock": "^1.0",
@@ -55,7 +55,7 @@
     "prefer-stable": true,
     "extra": {
         "branch-alias": {
-            "dev-main": "1.0.x-dev"
+            "dev-main": "2.0.x-dev"
         }
     },
     "config": {
