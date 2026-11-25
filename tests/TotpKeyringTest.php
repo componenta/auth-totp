@@ -65,4 +65,58 @@ final class TotpKeyringTest extends TestCase
             'subject-b',
         );
     }
+
+    public function testKeyringRetainsValidatedKeyBytesWhenInputReferenceChanges(): void
+    {
+        $key = str_repeat('k', 32);
+        $keyring = new TotpKeyring('current', ['current' => &$key]);
+        $before = $keyring->encrypt('BEFORE', 'subject-a');
+
+        $key = str_repeat('r', 32);
+
+        self::assertSame(
+            'BEFORE',
+            $keyring->decrypt(
+                $before['keyId'],
+                $before['nonce'],
+                $before['ciphertext'],
+                'subject-a',
+            ),
+        );
+
+        $after = $keyring->encrypt('AFTER', 'subject-a');
+        $original = new TotpKeyring('current', ['current' => str_repeat('k', 32)]);
+        self::assertSame(
+            'AFTER',
+            $original->decrypt(
+                $after['keyId'],
+                $after['nonce'],
+                $after['ciphertext'],
+                'subject-a',
+            ),
+        );
+    }
+
+    public function testNewKeyringCanRotateEncryptionWhileRetainingDecryptionKey(): void
+    {
+        $oldKey = str_repeat('k', 32);
+        $old = new TotpKeyring('old', ['old' => $oldKey]);
+        $encrypted = $old->encrypt('SECRET', 'subject-a');
+
+        $rotated = new TotpKeyring('new', [
+            'old' => $oldKey,
+            'new' => str_repeat('r', 32),
+        ]);
+
+        self::assertSame(
+            'SECRET',
+            $rotated->decrypt(
+                $encrypted['keyId'],
+                $encrypted['nonce'],
+                $encrypted['ciphertext'],
+                'subject-a',
+            ),
+        );
+        self::assertSame('new', $rotated->encrypt('SECRET', 'subject-a')['keyId']);
+    }
 }

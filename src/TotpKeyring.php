@@ -25,6 +25,8 @@ final readonly class TotpKeyring
             );
         }
 
+        $ownedKeys = [];
+
         foreach ($keys as $id => $key) {
             if (
                 preg_match('/\A[A-Za-z0-9._-]{1,64}\z/D', (string) $id) !== 1
@@ -34,9 +36,11 @@ final readonly class TotpKeyring
                     'TOTP keyring contains an invalid key.',
                 );
             }
+
+            $ownedKeys[$id] = $key;
         }
 
-        $this->keys = $keys;
+        $this->keys = $ownedKeys;
     }
 
     /** @return array{currentKeyId: string, keys: string} */
