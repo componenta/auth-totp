@@ -52,10 +52,10 @@ final readonly class TotpEnrollmentStartHandler implements RequestHandlerInterfa
             return $this->responses->createResponse(422);
         }
         $response = $this->responses->createResponse(200);
-        $response->getBody()->write(json_encode([
+        JsonResponseBody::write($response, [
             'secret' => $enrollment->secret,
             'provisioning_uri' => $enrollment->provisioningUri,
-        ], JSON_THROW_ON_ERROR));
+        ]);
 
         return $response
             ->withHeader('Content-Type', 'application/json')

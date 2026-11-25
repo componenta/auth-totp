@@ -18,6 +18,7 @@ use Componenta\Identity\IdentityInterface;
 use Componenta\Identity\UuidFactory;
 use Componenta\Identity\UuidInterface;
 use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -30,9 +31,84 @@ use Componenta\Auth\Totp\TotpEnrollmentStartHandler;
 use Componenta\Auth\Totp\TotpManagerInterface;
 use Componenta\Auth\Totp\Tests\Support\SqliteDatabaseFixture;
 use OTPHP\TOTP;
+use Psr\Http\Message\ResponseFactoryInterface;
+use Psr\Http\Message\StreamInterface;
 
 final class EnrollmentAuthorizationTest extends TestCase
 {
+    /** @return iterable<string, array{string}> */
+    public static function responseStreams(): iterable
+    {
+        foreach (['complete', 'partial', 'stalled', 'throwing'] as $mode) {
+            yield $mode => [$mode];
+        }
+    }
+
+    #[DataProvider('responseStreams')]
+    public function testEnrollmentResponseIsCompleteOrFails(string $mode): void
+    {
+        [$gate, $request] = $this->context('allowed');
+        $enrollment = new TotpEnrollment('synthetic-secret', 'otpauth://totp/Example?secret=synthetic');
+        $totp = $this->createStub(TotpManagerInterface::class);
+        $totp->method('beginEnrollment')->willReturn($enrollment);
+        $sink = new class {
+            public string $body = '';
+            public int $calls = 0;
+        };
+        $failure = new \RuntimeException('Synthetic enrollment response stream failed.');
+        $stream = $this->createStub(StreamInterface::class);
+        $stream->method('write')->willReturnCallback(
+            static function (string $bytes) use ($mode, $sink, $failure): int {
+                if (++$sink->calls > 1) {
+                    if ($mode === 'stalled') {
+                        return 0;
+                    }
+                    if ($mode === 'throwing') {
+                        throw $failure;
+                    }
+                }
+                $written = $mode === 'complete' ? strlen($bytes) : min(7, strlen($bytes));
+                $sink->body .= substr($bytes, 0, $written);
+
+                return $written;
+            },
+        );
+        $stream->method('__toString')->willReturnCallback(static fn(): string => $sink->body);
+        $responses = $this->createStub(ResponseFactoryInterface::class);
+        $responses->method('createResponse')->willReturn(new Response(200, [], $stream));
+        $handler = new TotpEnrollmentStartHandler($totp, $responses, $gate, 'Example');
+        $request = $request->withParsedBody(['label' => 'User']);
+
+        if (in_array($mode, ['stalled', 'throwing'], true)) {
+            $observed = null;
+            try {
+                $handler->handle($request);
+            } catch (\RuntimeException $exception) {
+                $observed = $exception;
+            }
+
+            self::assertInstanceOf(\RuntimeException::class, $observed,
+                'A truncated enrollment response must not be returned as success.');
+            if ($mode === 'throwing') {
+                self::assertSame($failure, $observed);
+            }
+            self::assertSame(2, $sink->calls);
+
+            return;
+        }
+
+        $response = $handler->handle($request);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertJson((string) $response->getBody());
+        self::assertSame([
+            'secret' => $enrollment->secret,
+            'provisioning_uri' => $enrollment->provisioningUri,
+        ], json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR));
+        self::assertSame('application/json', $response->getHeaderLine('Content-Type'));
+        self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
+    }
+
     #[DataProvider('requests')]
     public function testGateRunsBeforeFactorMutation(bool $start, string $case, int $status): void
     {
