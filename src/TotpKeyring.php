@@ -8,11 +8,11 @@ final readonly class TotpKeyring
 {
     private const int KEY_BYTES = SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES;
 
-    /** @var non-empty-array<string, string> */
+    /** @var non-empty-array<array-key, string> */
     private array $keys;
 
     /**
-     * @param non-empty-array<string, string> $keys
+     * @param non-empty-array<array-key, string> $keys
      */
     public function __construct(
         public string $currentKeyId,
@@ -27,7 +27,7 @@ final readonly class TotpKeyring
 
         foreach ($keys as $id => $key) {
             if (
-                preg_match('/\A[A-Za-z0-9._-]{1,64}\z/D', $id) !== 1
+                preg_match('/\A[A-Za-z0-9._-]{1,64}\z/D', (string) $id) !== 1
                 || strlen($key) !== self::KEY_BYTES
             ) {
                 throw new \InvalidArgumentException(
