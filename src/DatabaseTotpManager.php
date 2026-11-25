@@ -68,6 +68,9 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             ->withLabel($label)
             ->withIssuer($issuer);
         $secret = $otp->getSecret();
+        // OTPHP also validates the label/issuer combination while building the
+        // URI. Finish that validation before replacing any pending enrollment.
+        $provisioningUri = $otp->getProvisioningUri();
         $encrypted = $this->keyring->encrypt(
             $secret,
             $subjectId->toString(),
@@ -98,7 +101,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
 
         return new TotpEnrollment(
             secret: $secret,
-            provisioningUri: $otp->getProvisioningUri(),
+            provisioningUri: $provisioningUri,
         );
     }
 

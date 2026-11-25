@@ -28,6 +28,8 @@ use Componenta\Auth\Totp\TotpEnrollment;
 use Componenta\Auth\Totp\TotpEnrollmentConfirmHandler;
 use Componenta\Auth\Totp\TotpEnrollmentStartHandler;
 use Componenta\Auth\Totp\TotpManagerInterface;
+use Componenta\Auth\Totp\Tests\Support\SqliteDatabaseFixture;
+use OTPHP\TOTP;
 
 final class EnrollmentAuthorizationTest extends TestCase
 {
@@ -86,6 +88,39 @@ final class EnrollmentAuthorizationTest extends TestCase
         $this->expectExceptionMessage('Storage is unavailable.');
 
         $handler->handle($request->withParsedBody(['label' => 'User']));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function labelsWithIssuer(): iterable
+    {
+        yield 'literal separator' => ['Other:User'];
+        yield 'encoded separator' => ['Other%3AUser'];
+    }
+
+    #[DataProvider('labelsWithIssuer')]
+    public function testInvalidProvisioningLabelDoesNotReplacePendingEnrollment(string $label): void
+    {
+        if (!extension_loaded('pdo_sqlite')) {
+            self::markTestSkipped('pdo_sqlite is required.');
+        }
+        [$gate, $request, $responses, $identity] = $this->context('allowed');
+        $clock = new FrozenClock('2030-01-01T00:00:00+00:00', 'UTC');
+        $totp = new DatabaseTotpManager(
+            SqliteDatabaseFixture::create(),
+            $clock,
+            new TotpKeyring('current', ['current' => str_repeat('k', 32)]),
+        );
+        $pending = $totp->beginEnrollment($identity->uuid, 'User', 'Example');
+        $handler = new TotpEnrollmentStartHandler($totp, $responses, $gate, 'Example');
+
+        $response = $handler->handle($request->withParsedBody(['label' => $label]));
+
+        self::assertSame(422, $response->getStatusCode());
+        $code = TOTP::createFromSecret($pending->secret, $clock)->now();
+        self::assertTrue(
+            $totp->confirmEnrollment($identity->uuid, $code),
+            'Rejecting a new label must preserve the previously issued enrollment.',
+        );
     }
 
     private function context(string $case): array
