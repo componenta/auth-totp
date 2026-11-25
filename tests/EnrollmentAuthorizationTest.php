@@ -22,6 +22,8 @@ use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+use Componenta\Auth\Totp\DatabaseTotpManager;
+use Componenta\Auth\Totp\TotpKeyring;
 use Componenta\Auth\Totp\TotpEnrollment;
 use Componenta\Auth\Totp\TotpEnrollmentConfirmHandler;
 use Componenta\Auth\Totp\TotpEnrollmentStartHandler;
@@ -52,6 +54,38 @@ final class EnrollmentAuthorizationTest extends TestCase
             yield [$start, 'stale', 403];
             yield [$start, 'allowed', $start ? 200 : 204];
         }
+    }
+
+    public function testEnrollmentValidationFailureReturnsAnUnprocessableResponse(): void
+    {
+        [$gate, $request, $responses] = $this->context('allowed');
+        $totp = new DatabaseTotpManager(
+            $this->createStub(\Cycle\Database\DatabaseInterface::class),
+            new FrozenClock('2030-01-01T00:00:00+00:00', 'UTC'),
+            new TotpKeyring('current', ['current' => str_repeat('k', 32)]),
+        );
+        $handler = new TotpEnrollmentStartHandler($totp, $responses, $gate, 'Example');
+
+        $response = $handler->handle($request->withParsedBody([
+            'label' => str_repeat('x', 321),
+        ]));
+
+        self::assertSame(422, $response->getStatusCode());
+    }
+
+    public function testUnexpectedEnrollmentFailureIsNotReportedAsInvalidInput(): void
+    {
+        [$gate, $request, $responses] = $this->context('allowed');
+        $totp = $this->createStub(TotpManagerInterface::class);
+        $totp->method('beginEnrollment')->willThrowException(
+            new \RuntimeException('Storage is unavailable.'),
+        );
+        $handler = new TotpEnrollmentStartHandler($totp, $responses, $gate, 'Example');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Storage is unavailable.');
+
+        $handler->handle($request->withParsedBody(['label' => 'User']));
     }
 
     private function context(string $case): array

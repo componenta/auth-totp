@@ -42,11 +42,15 @@ final readonly class TotpEnrollmentStartHandler implements RequestHandlerInterfa
             return $this->responses->createResponse(422);
         }
 
-        $enrollment = $this->totp->beginEnrollment(
-            $identity->uuid,
-            $label,
-            $this->issuer,
-        );
+        try {
+            $enrollment = $this->totp->beginEnrollment(
+                $identity->uuid,
+                $label,
+                $this->issuer,
+            );
+        } catch (\InvalidArgumentException) {
+            return $this->responses->createResponse(422);
+        }
         $response = $this->responses->createResponse(200);
         $response->getBody()->write(json_encode([
             'secret' => $enrollment->secret,
