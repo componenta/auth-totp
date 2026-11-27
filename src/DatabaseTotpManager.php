@@ -128,15 +128,13 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 return false;
             }
 
+            $credential = $this->hydrateCredential($subjectId, $row, pending: true);
             $subject = $subjectId->toString();
             $pendingCiphertext = self::stringValue(
                 $row,
                 'pending_ciphertext',
             );
-            $pendingCreatedAt = $this->date(
-                self::stringValue($row, 'pending_created_at'),
-            );
-            $pendingExpiresAt = $pendingCreatedAt->modify(
+            $pendingExpiresAt = $credential->createdAt->modify(
                 sprintf('+%d seconds', $this->enrollmentTtlSeconds),
             );
             $now = $this->now();
@@ -149,9 +147,9 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 return false;
             }
 
-            $digits = self::intValue($row, 'pending_digits');
-            $period = self::intValue($row, 'pending_period');
-            $digest = self::stringValue($row, 'pending_digest');
+            $digits = $credential->digits;
+            $period = $credential->period;
+            $digest = $credential->digest;
 
             if (!self::validCode($code, $digits)) {
                 return false;
@@ -261,19 +259,17 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 return null;
             }
 
+            $credential = $this->hydrateCredential($subjectId, $row);
             $subject = $subjectId->toString();
-            $digits = self::intValue($row, 'active_digits');
-            $period = self::intValue($row, 'active_period');
-            $digest = self::stringValue($row, 'active_digest');
+            $digits = $credential->digits;
+            $period = $credential->period;
+            $digest = $credential->digest;
 
             if (!self::validCode($code, $digits)) {
                 return null;
             }
 
-            $lastUsedStep = self::nullableIntValue(
-                $row,
-                'last_used_step',
-            );
+            $lastUsedStep = $credential->lastUsedStep;
             $secret = $this->keyring->decrypt(
                 self::stringValue($row, 'active_key_id'),
                 self::stringValue($row, 'active_nonce'),
@@ -340,22 +336,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             return null;
         }
 
-        return new TotpCredential(
-            subjectId: $subjectId,
-            digits: self::intValue($row, 'active_digits'),
-            period: self::intValue($row, 'active_period'),
-            digest: self::stringValue($row, 'active_digest'),
-            createdAt: $this->date(
-                self::stringValue($row, 'created_at'),
-            ),
-            enabledAt: $this->date(
-                self::stringValue($row, 'enabled_at'),
-            ),
-            lastUsedStep: self::nullableIntValue(
-                $row,
-                'last_used_step',
-            ),
-        );
+        return $this->hydrateCredential($subjectId, $row);
     }
 
     #[\Override]
@@ -449,6 +430,33 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             ->fetch();
 
         return is_array($row) ? $row : null;
+    }
+
+    /** @param array<array-key, mixed> $row */
+    private function hydrateCredential(
+        UuidInterface $subjectId,
+        array $row,
+        bool $pending = false,
+    ): TotpCredential {
+        $prefix = $pending ? 'pending_' : 'active_';
+
+        // Reads and proof acceptance share the model's persisted-state rules.
+        return new TotpCredential(
+            subjectId: $subjectId,
+            digits: self::intValue($row, $prefix . 'digits'),
+            period: self::intValue($row, $prefix . 'period'),
+            digest: self::stringValue($row, $prefix . 'digest'),
+            createdAt: $this->date(self::stringValue(
+                $row,
+                $pending ? 'pending_created_at' : 'created_at',
+            )),
+            enabledAt: $pending
+                ? null
+                : $this->date(self::stringValue($row, 'enabled_at')),
+            lastUsedStep: $pending
+                ? null
+                : self::nullableIntValue($row, 'last_used_step'),
+        );
     }
 
     private function now(): DateTimeImmutable

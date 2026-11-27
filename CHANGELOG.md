@@ -9,6 +9,9 @@
   the caller's outer transaction.
 - Recheck the configured TOTP window after verification commits. A code that
   leaves that window during UPDATE or COMMIT is rejected and stays consumed.
+- Validate persisted active and pending parameters through `TotpCredential`
+  before accepting a proof. Invalid metadata cannot activate a factor or
+  advance its replay counter; valid model-supported parameters are retained.
 - Keep public signatures and the database schema unchanged.
 
 ### Dependency compatibility

@@ -22,6 +22,12 @@ configured time window after its claim commits; an expired proof returns `false`
 and the claimed step remains consumed. Clock failures propagate; they roll back
 an uncommitted activation but cannot undo a committed verification claim.
 
+Pending and active credentials use the same persisted-parameter validation as
+`TotpCredential`: 6–8 digits, a 15–120 second period, and SHA-1, SHA-256 or SHA-512
+(case-insensitive). Invalid stored parameters raise `InvalidArgumentException`
+before secret verification or a state update. Rejected enrollment preserves the
+existing factor; rejected verification leaves the replay counter unchanged.
+
 ## Requirements
 
 PHP 8.4 or newer and the coordinated Componenta Auth 4 dependencies:
