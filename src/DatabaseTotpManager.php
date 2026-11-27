@@ -115,10 +115,10 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             return false;
         }
 
-        return $this->database->transaction(function () use (
-            $subjectId,
-            $code,
-        ): bool {
+        $this->database->begin();
+        $committed = false;
+
+        try {
             $row = $this->row($subjectId);
 
             if (
@@ -136,14 +136,15 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             $pendingCreatedAt = $this->date(
                 self::stringValue($row, 'pending_created_at'),
             );
+            $pendingExpiresAt = $pendingCreatedAt->modify(
+                sprintf('+%d seconds', $this->enrollmentTtlSeconds),
+            );
             $now = $this->now();
 
-            if (
-                $pendingCreatedAt->modify(
-                    sprintf('+%d seconds', $this->enrollmentTtlSeconds),
-                ) <= $now
-            ) {
+            if ($pendingExpiresAt <= $now) {
                 $this->clearPending($subject, $pendingCiphertext);
+                $this->database->commit();
+                $committed = true;
 
                 return false;
             }
@@ -209,8 +210,30 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 ])
                 ->run();
 
-            return $affected === 1;
-        });
+            if ($affected !== 1) {
+                return false;
+            }
+
+            $completedAt = $this->now();
+
+            // A delayed write must not activate an expired enrollment or step.
+            // Rollback also preserves any previously active factor.
+            if (
+                $pendingExpiresAt <= $completedAt
+                || !$this->isCurrentStep($step, $period, $completedAt)
+            ) {
+                return false;
+            }
+
+            $this->database->commit();
+            $committed = true;
+
+            return true;
+        } finally {
+            if (!$committed) {
+                $this->database->rollback();
+            }
+        }
     }
 
     #[\Override]
@@ -223,10 +246,11 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             return false;
         }
 
-        return $this->database->transaction(function () use (
+        /** @var array{step: int, period: int}|null $verified */
+        $verified = $this->database->transaction(function () use (
             $subjectId,
             $code,
-        ): bool {
+        ): ?array {
             $row = $this->row($subjectId);
 
             if (
@@ -234,7 +258,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 || ($row['active_ciphertext'] ?? null) === null
                 || ($row['enabled_at'] ?? null) === null
             ) {
-                return false;
+                return null;
             }
 
             $subject = $subjectId->toString();
@@ -243,7 +267,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             $digest = self::stringValue($row, 'active_digest');
 
             if (!self::validCode($code, $digits)) {
-                return false;
+                return null;
             }
 
             $lastUsedStep = self::nullableIntValue(
@@ -271,7 +295,7 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
             }
 
             if ($step === null) {
-                return false;
+                return null;
             }
 
             $update = $this->database->update($this->table)
@@ -288,10 +312,19 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 $update->where('last_used_step', $lastUsedStep);
             }
 
-            return $update
+            $affected = $update
                 ->values(['last_used_step' => $step])
-                ->run() === 1;
+                ->run();
+
+            return $affected === 1 ? ['step' => $step, 'period' => $period] : null;
         });
+
+        // Claim completion includes COMMIT; an expired step remains consumed.
+        return $verified !== null && $this->isCurrentStep(
+            $verified['step'],
+            $verified['period'],
+            $this->now(),
+        );
     }
 
     #[\Override]
@@ -351,6 +384,14 @@ final readonly class DatabaseTotpManager implements TotpManagerInterface
                 'pending_created_at' => null,
             ])
             ->run();
+    }
+
+    private function isCurrentStep(int $step, int $period, DateTimeImmutable $now): bool
+    {
+        $currentStep = intdiv($now->getTimestamp(), $period);
+
+        return $step >= $currentStep - $this->window
+            && $step <= $currentStep + $this->window;
     }
 
     private function matchingStep(

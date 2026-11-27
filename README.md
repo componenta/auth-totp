@@ -15,6 +15,13 @@ Security properties:
 - TOTP evidence adds a possession factor but never claims phishing resistance;
 - successful reauthentication rotates the active `SessionCredential`.
 
+Enrollment activation checks both the pending TTL and the accepted code step
+after its conditional write, before committing. A late activation is rolled back,
+including any replacement of the existing factor. Verification checks the
+configured time window after its claim commits; an expired proof returns `false`
+and the claimed step remains consumed. Clock failures propagate; they roll back
+an uncommitted activation but cannot undo a committed verification claim.
+
 ## Requirements
 
 PHP 8.4 or newer and the coordinated Componenta Auth 4 dependencies:

@@ -2,6 +2,15 @@
 
 ## Unreleased (3.0.0)
 
+### Fixed
+
+- Roll back enrollment activation when its pending secret or accepted TOTP step
+  expires while the UPDATE waits. Preserve any previously active factor and
+  the caller's outer transaction.
+- Recheck the configured TOTP window after verification commits. A code that
+  leaves that window during UPDATE or COMMIT is rejected and stays consumed.
+- Keep public signatures and the database schema unchanged.
+
 ### Dependency compatibility
 
 - Require Componenta Auth 4, Auth Session 2 and Auth Session HTTP 3, including
