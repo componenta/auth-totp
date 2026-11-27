@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased (3.0.0)
+
+### Dependency compatibility
+
+- Require Componenta Auth 4, Auth Session 2 and Auth Session HTTP 3, including
+  the CSRF 4 browser transport. Upgrade the authentication packages together;
+  the previous Auth 3 and Session HTTP 2 dependency families are incompatible.
+- Require `componenta/identity ^1.1.1` and test with `componenta/clock ^1.2.0`.
+
+### Migration
+
+- Enrollment start and confirmation require an explicit
+  `FactorManagementGuard` with an authoritative session registry, account
+  admission, session-bound CSRF and a bounded assurance policy.
+
 ## v2.0.0 (2026-10-10)
 
 ### Dependency compatibility

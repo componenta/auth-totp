@@ -1,6 +1,6 @@
 # Componenta Auth TOTP
 
-Encrypted TOTP enrollment and reauthentication for Componenta Auth 3.
+Encrypted TOTP enrollment and reauthentication for Componenta Auth 4.
 
 The package uses `spomky-labs/otphp` for RFC 6238 verification and libsodium
 XChaCha20-Poly1305 for secret encryption at rest.
@@ -15,12 +15,13 @@ Security properties:
 - TOTP evidence adds a possession factor but never claims phishing resistance;
 - successful reauthentication rotates the active `SessionCredential`.
 
-## Version 2 compatibility
+## Requirements
 
-Version 2.0.0 requires `componenta/auth-session-http ^2.0.1` and the CSRF v3
-browser security model. Unsafe protected requests require valid Origin/Referer
-evidence and a valid CSRF token; an omitted origin must never be accepted by
-default. Auth's session-issuance contract remains unchanged.
+PHP 8.4 or newer and the coordinated Componenta Auth 4 dependencies:
+`componenta/auth ^4.0.0`, `componenta/auth-session ^2.0.0` and
+`componenta/auth-session-http ^3.0.0`. The browser transport uses
+`componenta/http-csrf-middleware ^4.0.0`. Unsafe CSRF-protected requests require
+valid Origin/Referer evidence and an admitted CSRF token.
 
-See [CHANGELOG.md](CHANGELOG.md) for migration details and the verified
-security-admission tests.
+Upgrade these packages together. Session issuance uses the shared Componenta
+Auth session APIs. See [CHANGELOG.md](CHANGELOG.md) for migration details.
